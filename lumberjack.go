@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	backupTimeFormat = "2006-01-02T15-04-05.000"
+	backupTimeFormat = "20060102"
 	compressSuffix   = ".gz"
 	defaultMaxSize   = 100
 )
@@ -107,6 +107,8 @@ type Logger struct {
 	// using gzip. The default is not to perform compression.
 	Compress bool `json:"compress" yaml:"compress"`
 
+	DailyRotate bool `json:"compress" yaml:"compress"`
+
 	size int64
 	file *os.File
 	mu   sync.Mutex
@@ -147,6 +149,23 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 		if err = l.openExistingOrNew(len(p)); err != nil {
 			return 0, err
 		}
+	}
+
+	if l.DailyRotate{
+
+		filename := l.filename()
+		info, err := osStat(filename)
+
+		if err != nil {
+			 return 0, err
+		}
+
+
+			if info.ModTime().Day()!=time.Now().Day() {
+				if err := l.rotate(); err != nil {
+					return 0, err
+				}
+			}
 	}
 
 	if l.size+writeLen > l.max() {
@@ -271,6 +290,12 @@ func (l *Logger) openExistingOrNew(writeLen int) error {
 	}
 	if err != nil {
 		return fmt.Errorf("error getting log file info: %s", err)
+	}
+
+	if l.DailyRotate {
+		if info.ModTime().Day()!=time.Now().Day() {
+			return l.rotate()
+		}
 	}
 
 	if info.Size()+int64(writeLen) >= l.max() {
